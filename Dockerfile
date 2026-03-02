@@ -1,21 +1,20 @@
-FROM ubuntu:24.10
+FROM ubuntu:25.10
 
-MAINTAINER Jay Luker <jay_luker@harvard.edu>
-
-ARG RUBY_VERSION=3.3.0
-ARG POSTGRES_VERSION=16
-ARG BUNDLER_VERSION=2.5.10
+ARG RUBY_VERSION=3.4.8
+ARG POSTGRES_VERSION=17
+ARG BUNDLER_VERSION=2.6.7
 ARG REVISION=master
-ENV RAILS_ENV development
-ENV GEM_HOME /opt/canvas/.gems
-ENV GEM_PATH ${GEM_HOME}:/opt/canvas/.gem/ruby/${RUBY_VERSION}
-ENV DEBIAN_FRONTEND noninteractive
+ENV RAILS_ENV=development
+ENV GEM_HOME=/opt/canvas/.gems
+ENV GEM_PATH=${GEM_HOME}:/opt/canvas/.gem/ruby/${RUBY_VERSION}
+ENV DEBIAN_FRONTEND=noninteractive
+ENV ASDF_DATA_DIR=/opt/canvas/.asdf
 
 # add nodejs and recommended ruby repos
 RUN apt-get update \
-    && apt-get install -y autoconf curl curl fontforge g++ git libicu-dev \
-    libidn-dev libpq-dev libsqlite3-dev libxml2-dev libxmlsec1-dev \
-    libxslt1-dev make postgresql postgresql-contrib redis-server ruby ruby-dev \
+    && apt-get install -y autoconf build-essential curl curl fontforge g++ git libcurl4-openssl-dev libicu-dev \
+    libidn-dev libpq-dev libffi-dev libreadline-dev libsqlite3-dev libssl-dev libxml2-dev libxmlsec1-dev \
+    libxslt1-dev libyaml-dev make postgresql postgresql-contrib redis-server \
     software-properties-common sudo supervisor unzip zlib1g-dev \
     && apt-get clean && rm -Rf /var/cache/apt
 
@@ -26,29 +25,32 @@ RUN curl -sSL -o apache-pulsar-client-dev.deb https://archive.apache.org/dist/pu
   && rm apache-pulsar-client-dev.deb apache-pulsar-client.deb
 
 RUN curl -fsSL https://deb.nodesource.com/setup_lts.x | bash - \
-    && curl -sS https://dl.yarnpkg.com/debian/pubkey.gpg | apt-key add - \
-    && echo "deb https://dl.yarnpkg.com/debian/ stable main" | tee /etc/apt/sources.list.d/yarn.list \
     && apt-get update \
     && apt-get install -y --no-install-recommends \
         nodejs \
-        yarn \
         unzip \
         fontforge \
     && apt-get clean && rm -Rf /var/cache/apt
 
+RUN npm install -g yarn
+
+RUN cd /bin && curl -sSL -o asdf.tar.gz https://github.com/asdf-vm/asdf/releases/download/v0.18.0/asdf-v0.18.0-linux-amd64.tar.gz && tar xzf asdf.tar.gz && rm asdf.tar.gz && cd -
+
 # Set the locale to avoid active_model_serializers bundler install failure
 RUN locale-gen en_US.UTF-8
-ENV LANG en_US.UTF-8
-ENV LANGUAGE en_US:en
-ENV LC_ALL en_US.UTF-8
+ENV LANG=en_US.UTF-8
+ENV LANGUAGE=en_US:en
+ENV LC_ALL=en_US.UTF-8
 
 RUN groupadd -r canvasuser -g 433 && \
     adduser --uid 431 --system --gid 433 --home /opt/canvas canvasuser && \
     adduser canvasuser sudo && \
     echo '%sudo ALL=(ALL) NOPASSWD:ALL\nDefaults env_keep += "GEM_HOME GEM_PATH RAILS_ENV REVISION LANG LANGUAGE LC_ALL"' >> /etc/sudoers
 
-RUN sudo -u canvasuser mkdir -p $GEM_HOME \
-  && sudo -u canvasuser gem install --user-install bundler:${BUNDLER_VERSION} --no-document
+RUN sudo -u canvasuser asdf plugin add ruby https://github.com/asdf-vm/asdf-ruby.git && sudo -u canvasuser asdf install ruby $RUBY_VERSION && sudo -u canvasuser asdf set -u ruby $RUBY_VERSION
+
+RUN sudo -u canvasuser mkdir -p $GEM_HOME
+#RUN sudo -u canvasuser sh -c 'PATH=$PATH:$HOME/.asdf/shims gem install --user-install bundler:${BUNDLER_VERSION} --no-document'
 
 COPY --chown=canvasuser assets/dbinit.sh /opt/canvas/dbinit.sh
 COPY --chown=canvasuser assets/start.sh /opt/canvas/start.sh
@@ -63,6 +65,10 @@ RUN cd /opt/canvas \
 
 WORKDIR /opt/canvas/canvas-lms
 
+RUN cd config && for config in ls *.yml.example \
+       ; do cp ${config} ${config%.example} \
+       ; done && rm consul.yml vault.yml && touch consul.yml vault.yml
+
 COPY --chown=canvasuser assets/database.yml config/database.yml
 COPY --chown=canvasuser assets/domain.yml config/domain.yml
 COPY --chown=canvasuser assets/redis.yml config/redis.yml
@@ -71,11 +77,7 @@ COPY --chown=canvasuser assets/development-local.rb config/environments/developm
 COPY --chown=canvasuser assets/outgoing_mail.yml config/outgoing_mail.yml
 COPY assets/healthcheck.sh /usr/local/bin/healthcheck.sh
 
-RUN for config in amazon_s3 delayed_jobs domain file_store security external_migration \
-       ; do cp config/$config.yml.example config/$config.yml \
-       ; done
-
-ARG BUNDLE=/opt/canvas/.local/share/gem/ruby/${RUBY_VERSION}/bin/bundle
+ARG BUNDLE=/opt/canvas/.asdf/shims/bundle
 RUN sudo -u canvasuser ${BUNDLE} config set --local without 'development:test' \
   &&sudo -u canvasuser ${BUNDLE} config set --local without 'mysql' \
   && sudo -u canvasuser ${BUNDLE} install --jobs 8
