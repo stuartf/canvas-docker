@@ -75,6 +75,7 @@ COPY --chown=canvasuser assets/redis.yml config/redis.yml
 COPY --chown=canvasuser assets/cache_store.yml config/cache_store.yml
 COPY --chown=canvasuser assets/development-local.rb config/environments/development-local.rb
 COPY --chown=canvasuser assets/outgoing_mail.yml config/outgoing_mail.yml
+COPY --chown=canvasuser assets/security.yml config/security.yml
 COPY assets/healthcheck.sh /usr/local/bin/healthcheck.sh
 
 ARG BUNDLE=/opt/canvas/.asdf/shims/bundle
