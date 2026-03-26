@@ -12,7 +12,7 @@ ENV ASDF_DATA_DIR=/opt/canvas/.asdf
 
 # add nodejs and recommended ruby repos
 RUN apt-get update \
-    && apt-get install -y autoconf build-essential curl curl fontforge g++ git libcurl4-openssl-dev libicu-dev \
+    && apt-get install -y autoconf build-essential curl curl file fontforge g++ git libcurl4-openssl-dev libicu-dev \
     libidn-dev libpq-dev libffi-dev libreadline-dev libsqlite3-dev libssl-dev libxml2-dev libxmlsec1-dev \
     libxslt1-dev libyaml-dev make postgresql postgresql-contrib redis-server \
     software-properties-common sudo supervisor unzip zlib1g-dev \
